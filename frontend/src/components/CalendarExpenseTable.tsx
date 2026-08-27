@@ -192,7 +192,7 @@ export function CalendarExpenseTable({
               amount: editingExpense.amount.toString(),
               description: editingExpense.description,
               category: editingExpense.category,
-              date: formatDate(new Date(editingExpense.date)),
+              date: editingExpense.date,
             }}
             onSubmit={handleUpdate}
             onCancel={() => {
