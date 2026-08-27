@@ -5,8 +5,24 @@ RSpec.describe "Api::Expenses", type: :request do
   let!(:transport_category) { Category.create!(name: "Transport") }
 
   describe "GET /api/expenses" do
-  let!(:expense1) { Expense.create!(description: "Lunch", amount: 100.00, category: food_category, date: Date.today) }
-  let!(:expense2) { Expense.create!(description: "Taxi", amount: 50.00, category: transport_category, date: Date.today) }
+    let!(:january_expense) do
+      Expense.create!(
+        description: "Lunch",
+        amount: 100.00,
+        category: food_category,
+        date: Date.new(2026, 1, 20),
+        created_at: Time.zone.local(2026, 8, 1)
+      )
+    end
+    let!(:earlier_january_expense) do
+      Expense.create!(
+        description: "Taxi",
+        amount: 50.00,
+        category: transport_category,
+        date: Date.new(2026, 1, 10),
+        created_at: Time.zone.local(2026, 8, 2)
+      )
+    end
 
     it "returns all expenses with category information" do
       get "/api/expenses"
@@ -16,12 +32,53 @@ RSpec.describe "Api::Expenses", type: :request do
       expect(json.length).to eq(2)
     end
 
-    it "returns expenses in descending order by created_at" do
+    it "returns expenses in descending order by date when creation order conflicts" do
       get "/api/expenses"
 
       json = JSON.parse(response.body)
-      expect(json.first["id"]).to eq(expense2.id)
-      expect(json.last["id"]).to eq(expense1.id)
+      expect(json.pluck("id")).to eq([ january_expense.id, earlier_january_expense.id ])
+    end
+
+    it "orders expenses with the same date by newest creation first" do
+      newer_expense = Expense.create!(
+        description: "Coffee",
+        amount: 25.00,
+        category: food_category,
+        date: january_expense.date,
+        created_at: Time.zone.local(2026, 8, 1, 11)
+      )
+
+      get "/api/expenses"
+
+      json = JSON.parse(response.body)
+      expect(json.pluck("id")).to eq([ newer_expense.id, january_expense.id, earlier_january_expense.id ])
+    end
+
+    context "with year and month parameters" do
+      let!(:august_expense) do
+        Expense.create!(
+          description: "Hotel",
+          amount: 200.00,
+          category: transport_category,
+          date: Date.new(2026, 8, 15),
+          created_at: Time.zone.local(2026, 1, 5)
+        )
+      end
+
+      it "filters expenses by their expense date" do
+        get "/api/expenses", params: { year: 2026, month: 8 }
+
+        json = JSON.parse(response.body)
+        expect(json.pluck("id")).to eq([ august_expense.id ])
+      end
+
+      it "includes a January expense created in August in January results" do
+        get "/api/expenses", params: { year: 2026, month: 1 }
+
+        json = JSON.parse(response.body)
+        expect(json.pluck("id")).to include(january_expense.id)
+        expect(json.pluck("id")).not_to include(august_expense.id)
+      end
     end
   end
 
